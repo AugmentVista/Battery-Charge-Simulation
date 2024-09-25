@@ -1,54 +1,42 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+
 public class Orbit : MonoBehaviour
 {
     // List of collided objects
-    private List<GameObject> collidedObjects = new List<GameObject>(); 
+    private List<GameObject> collidedObjects = new List<GameObject>();
 
-    private float speed = 20;
+    private float speed = 40.0f;
 
     private Vector2 target;
+    public Vector2 startingPosition;
 
     private Rigidbody2D rb;
     private Rigidbody2D rbCollidedWith;
 
+    private bool timerFinished;
     private bool hasTarget;
+    private bool isFrozen = false;
 
     public float targetGoalRadius;
 
+    // Static list to hold starting positions across all instances
+    private static List<Vector2> availablePositions = new List<Vector2>();
+
+
     private void Start()
     {
+        startingPosition = transform.position;
         rb = GetComponent<Rigidbody2D>();
         SetInitialDirection();
 
         target = Vector2.zero;
         hasTarget = false;
-    }
 
-    private void Update()
-    {
-        if (hasTarget)
-        {
-            MoveTowardsTarget();
+        availablePositions.Add(startingPosition);
 
-            if (Vector2.Distance(transform.position, target) <= targetGoalRadius)
-            {
-                ReverseDirection();
-                hasTarget = false; // clear target when reached
-            }
-        }
-        Debug.Log("Current Position: " + transform.position);
-    }
-
-    private void MoveTowardsTarget()
-    {
-        Vector2 direction = (target - (Vector2)transform.position).normalized;
-        rb.velocity = direction * speed;
-    }
-
-    private void ReverseDirection()
-    {
-        rb.velocity = -rb.velocity; 
+        StartCoroutine(ManagePositions());
     }
 
     private void SetInitialDirection()
@@ -71,9 +59,73 @@ public class Orbit : MonoBehaviour
         }
     }
 
+    private void Update()
+    {
+        if (hasTarget && !isFrozen)
+        {
+            MoveTowardsTarget();
+
+            if (Vector2.Distance(transform.position, target) <= targetGoalRadius)
+            {
+                ReverseDirection();
+                hasTarget = false; // clear target when reached
+            }
+        }
+        Debug.Log("Current Position: " + transform.position);
+        FreezeCheck();
+    }
+
+    void OnGUI()
+    {
+        if (Input.GetMouseButtonDown(0)) // Get mouse position and set as target
+        {
+            Vector2 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            target = mousePos; // target becomes mouse location on click
+            hasTarget = true;
+        }
+    }
+    private IEnumerator ManagePositions()
+    {
+        yield return new WaitForSeconds(5);
+        timerFinished = true;
+    }
+
+    private void FreezeCheck()
+    {
+        if (!isFrozen && availablePositions.Count > 0 && timerFinished)
+        {
+            Vector2 currentPosition = transform.position;
+
+            foreach (Vector2 position in availablePositions)
+            {
+                if (Vector2.Distance(currentPosition, position) < 0.05f) // Doesn't need to be exact just very close
+                {
+                    rb.velocity = Vector2.zero;
+                    rb.constraints = RigidbodyConstraints2D.FreezePositionX | RigidbodyConstraints2D.FreezePositionY; // Freeze position
+                    isFrozen = true; 
+                    availablePositions.Remove(position); // Remove to prevent conflict
+                    break; 
+                }
+            }
+        }
+    }
+
+
+
+    private void MoveTowardsTarget()
+    {
+        Vector2 direction = (target - (Vector2)transform.position).normalized;
+        rb.velocity = direction * speed;
+    }
+
+    private void ReverseDirection()
+    {
+        rb.velocity = -rb.velocity;
+    }
+
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        if (collision.gameObject.CompareTag("OrbitObject"))
+        if (collision.gameObject.CompareTag("OrbitObject") && !isFrozen)
         {
             GameObject collidedObject = collision.gameObject;
 
@@ -113,16 +165,6 @@ public class Orbit : MonoBehaviour
                         break;
                 }
             }
-        }
-    }
-
-    void OnGUI()
-    {
-        if (Input.GetMouseButtonDown(0)) // Get mouse position and set as target
-        {
-            Vector2 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            target = mousePos; // target becomes mouse location on click
-            hasTarget = true;
         }
     }
 }
